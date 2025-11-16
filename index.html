@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>보선녀의 리듬게임</title>
+  <title>보선녀 리듬게임</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -29,7 +29,9 @@
       width: 600px;
       height: 500px;
       border-radius: 20px;
-      background: url("bg.jpg") center/cover no-repeat;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
       box-shadow: 0 12px 30px rgba(0,0,0,0.6);
     }
 
@@ -58,6 +60,42 @@
     .keys { font-weight: 600; }
     .combo { font-weight: 700; color: #ff4ca3; }
     .tap-hint { margin-top: 8px; font-size: 12px; color:#555; }
+
+    /* 🔚 결과창 UI */
+    .result {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.88);
+      padding: 26px 40px;
+      border-radius: 20px;
+      text-align: center;
+      color: #fff;
+      font-size: 18px;
+      box-shadow: 0 18px 45px rgba(0,0,0,0.75);
+      opacity: 0;
+      transition: opacity 0.5s;
+      z-index: 999;
+    }
+    .result.show {
+      opacity: 1;
+    }
+    .hidden { display: none; }
+
+    .result h2 {
+      font-size: 26px;
+      margin-bottom: 10px;
+    }
+    .result p {
+      margin: 4px 0;
+    }
+    .result .big-score {
+      margin-top: 10px;
+      font-size: 24px;
+      font-weight: 700;
+      color: #ffd560;
+    }
   </style>
 </head>
 <body>
@@ -83,13 +121,29 @@
     </div>
   </div>
 
+  <!-- 🔚 결과창 -->
+  <div id="result" class="result hidden">
+    <h2>RESULT</h2>
+    <p>Perfect : <span id="rPerfect">0</span></p>
+    <p>Great   : <span id="rGreat">0</span></p>
+    <p>Good    : <span id="rGood">0</span></p>
+    <p>Miss    : <span id="rMiss">0</span></p>
+    <p>Max Combo : <span id="rCombo">0</span></p>
+    <p class="big-score">Score : <span id="rScore">0</span></p>
+  </div>
+
   <!-- 노래 파일 -->
-  <audio id="bgm" src="soso.m4a" preload="auto"></audio>
+  <audio id="bgm" src="inalchi.mp3" preload="auto"></audio>
+
+  <audio id="hit" src="star.mp3.m4a" preload="auto"></audio>
+
 
   <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
     const bgm = document.getElementById("bgm");
+    const hitSound = document.getElementById("hit");
+
 
     const startBtn = document.getElementById("startBtn");
     const tapBtn = document.getElementById("tapBtn");
@@ -98,13 +152,22 @@
     const comboEl = document.getElementById("combo");
     const judgeEl = document.getElementById("judge");
 
+    // 결과창 요소
+    const resultBox  = document.getElementById("result");
+    const rPerfectEl = document.getElementById("rPerfect");
+    const rGreatEl   = document.getElementById("rGreat");
+    const rGoodEl    = document.getElementById("rGood");
+    const rMissEl    = document.getElementById("rMiss");
+    const rComboEl   = document.getElementById("rCombo");
+    const rScoreEl   = document.getElementById("rScore");
+
     const W = canvas.width;
     const H = canvas.height;
     const columns = 4;
     const keyMap = ["d","f","j","k"];
     const colW = W / columns;
     const judgeLineY = H - 80;
-    const noteSpeed = 260; // px/sec
+    const noteSpeed = 550; // px/sec
 
     let notes = [];
     let started = false;
@@ -114,394 +177,650 @@
     let lastJudge = "-";
     let lastJudgeTimer = 0;
 
-    // 🎵 보선녀가 찍은 박자 리스트 + column 섞어줌 (0,1,2,3 반복)
-    // column: 0=D, 1=F, 2=J, 3=K
+    // 🔢 판정 결과 집계
+    let results = {
+      Perfect: 0,
+      Great: 0,
+      Good: 0,
+      Miss: 0
+    };
+    let maxCombo = 0;
+    let resultShown = false;
+
+    // 🎵 보선녀가 찍은 박자 리스트
     const chart = [
-{ time: 12.29, column: 0 },
-{ time: 12.76, column: 1 },
-{ time: 13.26, column: 2 },
-{ time: 13.58, column: 3 },
-{ time: 14.06, column: 0 },
-{ time: 14.26, column: 1 },
-{ time: 15.57, column: 2 },
-{ time: 16.07, column: 3 },
-{ time: 16.26, column: 0 },
-{ time: 16.61, column: 1 },
-{ time: 16.78, column: 2 },
-{ time: 17.05, column: 3 },
-{ time: 17.53, column: 0 },
-{ time: 19.24, column: 1 },
-{ time: 20.24, column: 2 },
-{ time: 20.74, column: 3 },
-{ time: 21.26, column: 0 },
-{ time: 22.04, column: 1 },
-{ time: 22.26, column: 2 },
-{ time: 23.23, column: 3 },
-{ time: 23.54, column: 0 },
-{ time: 24.28, column: 1 },
-{ time: 24.77, column: 2 },
-{ time: 25.05, column: 3 },
-{ time: 25.54, column: 0 },
-{ time: 27.23, column: 1 },
-{ time: 27.54, column: 2 },
-{ time: 28.01, column: 3 },
-{ time: 29.22, column: 0 },
-{ time: 29.53, column: 1 },
-{ time: 30.07, column: 2 },
-{ time: 31.55, column: 3 },
-{ time: 31.74, column: 0 },
-{ time: 32.08, column: 1 },
-{ time: 32.26, column: 2 },
-{ time: 32.56, column: 3 },
-{ time: 32.76, column: 0 },
-{ time: 33.03, column: 1 },
-{ time: 33.53, column: 2 },
-{ time: 34.13, column: 3 },
-{ time: 34.70, column: 0 },
-{ time: 35.25, column: 1 },
-{ time: 37.22, column: 2 },
-{ time: 39.50, column: 3 },
-{ time: 39.66, column: 0 },
-{ time: 40.05, column: 1 },
-{ time: 40.22, column: 2 },
-{ time: 40.55, column: 3 },
-{ time: 40.70, column: 0 },
-{ time: 40.98, column: 1 },
-{ time: 41.51, column: 2 },
-{ time: 42.07, column: 3 },
-{ time: 42.70, column: 0 },
-{ time: 43.23, column: 1 },
-{ time: 44.20, column: 2 },
-{ time: 44.53, column: 3 },
-{ time: 44.70, column: 0 },
-{ time: 45.01, column: 1 },
-{ time: 45.53, column: 2 },
-{ time: 46.00, column: 3 },
-{ time: 47.05, column: 0 },
-{ time: 47.24, column: 1 },
-{ time: 47.69, column: 2 },
-{ time: 48.23, column: 3 },
-{ time: 48.57, column: 0 },
-{ time: 48.72, column: 1 },
-{ time: 49.06, column: 2 },
-{ time: 51.24, column: 3 },
-{ time: 51.75, column: 0 },
-{ time: 52.22, column: 1 },
-{ time: 52.55, column: 2 },
-{ time: 52.73, column: 3 },
-{ time: 53.04, column: 0 },
-{ time: 53.52, column: 1 },
-{ time: 54.02, column: 2 },
-{ time: 55.20, column: 3 },
-{ time: 55.57, column: 0 },
-{ time: 55.73, column: 1 },
-{ time: 56.02, column: 2 },
-{ time: 56.21, column: 3 },
-{ time: 56.73, column: 0 },
-{ time: 57.24, column: 1 },
-{ time: 57.75, column: 2 },
-{ time: 58.22, column: 3 },
-{ time: 58.70, column: 0 },
-{ time: 59.22, column: 1 },
-{ time: 60.25, column: 2 },
-{ time: 60.75, column: 3 },
-{ time: 61.25, column: 0 },
-{ time: 61.77, column: 1 },
-{ time: 62.29, column: 2 },
-{ time: 62.78, column: 3 },
-{ time: 63.29, column: 0 },
-{ time: 64.72, column: 1 },
-{ time: 65.63, column: 2 },
-{ time: 66.60, column: 3 },
-{ time: 66.76, column: 0 },
-{ time: 67.11, column: 1 },
-{ time: 67.28, column: 2 },
-{ time: 68.25, column: 3 },
-{ time: 68.74, column: 0 },
-{ time: 69.22, column: 1 },
-{ time: 69.53, column: 2 },
-{ time: 69.96, column: 3 },
-{ time: 70.19, column: 0 },
-{ time: 71.27, column: 1 },
-{ time: 71.58, column: 2 },
-{ time: 72.22, column: 3 },
-{ time: 72.71, column: 0 },
-{ time: 72.98, column: 1 },
-{ time: 73.56, column: 2 },
-{ time: 75.25, column: 3 },
-{ time: 75.58, column: 0 },
-{ time: 76.05, column: 1 },
-{ time: 77.23, column: 2 },
-{ time: 77.59, column: 3 },
-{ time: 78.08, column: 0 },
-{ time: 79.52, column: 1 },
-{ time: 79.73, column: 2 },
-{ time: 80.09, column: 3 },
-{ time: 80.26, column: 0 },
-{ time: 80.59, column: 1 },
-{ time: 80.77, column: 2 },
-{ time: 81.06, column: 3 },
-{ time: 82.54, column: 0 },
-{ time: 82.69, column: 1 },
-{ time: 83.07, column: 2 },
-{ time: 83.29, column: 3 },
-{ time: 84.17, column: 0 },
-{ time: 85.24, column: 1 },
-{ time: 86.14, column: 2 },
-{ time: 87.56, column: 3 },
-{ time: 87.74, column: 0 },
-{ time: 88.07, column: 1 },
-{ time: 88.24, column: 2 },
-{ time: 88.57, column: 3 },
-{ time: 88.73, column: 0 },
-{ time: 89.01, column: 1 },
-{ time: 91.14, column: 2 },
-{ time: 91.68, column: 3 },
-{ time: 92.22, column: 0 },
-{ time: 92.53, column: 1 },
-{ time: 92.71, column: 2 },
-{ time: 93.03, column: 3 },
-{ time: 93.57, column: 0 },
-{ time: 94.06, column: 1 },
-{ time: 95.16, column: 2 },
-{ time: 95.29, column: 3 },
-{ time: 95.70, column: 0 },
-{ time: 96.23, column: 1 },
-{ time: 96.54, column: 2 },
-{ time: 96.70, column: 3 },
-{ time: 97.08, column: 0 },
-{ time: 97.70, column: 1 },
-{ time: 99.09, column: 2 },
-{ time: 99.25, column: 3 },
-{ time: 99.71, column: 0 },
-{ time: 100.23, column: 1 },
-{ time: 100.56, column: 2 },
-{ time: 100.72, column: 3 },
-{ time: 101.03, column: 0 },
-{ time: 101.58, column: 1 },
-{ time: 102.07, column: 2 },
-{ time: 103.22, column: 3 },
-{ time: 103.57, column: 0 },
-{ time: 103.72, column: 1 },
-{ time: 104.02, column: 2 },
-{ time: 104.20, column: 3 },
-{ time: 104.75, column: 0 },
-{ time: 105.24, column: 1 },
-{ time: 105.79, column: 2 },
-{ time: 106.25, column: 3 },
-{ time: 106.77, column: 0 },
-{ time: 107.25, column: 1 },
-{ time: 107.74, column: 2 },
-{ time: 107.99, column: 3 },
-{ time: 109.21, column: 0 },
-{ time: 109.56, column: 1 },
-{ time: 109.70, column: 2 },
-{ time: 110.06, column: 3 },
-{ time: 111.23, column: 0 },
-{ time: 111.74, column: 1 },
-{ time: 112.25, column: 2 },
-{ time: 112.80, column: 3 },
-{ time: 113.28, column: 0 },
-{ time: 113.82, column: 1 },
-{ time: 114.29, column: 2 },
-{ time: 114.77, column: 3 },
-{ time: 115.25, column: 0 },
-{ time: 115.57, column: 1 },
-{ time: 115.71, column: 2 },
-{ time: 116.05, column: 3 },
-{ time: 117.16, column: 0 },
-{ time: 117.55, column: 1 },
-{ time: 118.01, column: 2 },
-{ time: 118.16, column: 3 },
-{ time: 119.20, column: 0 },
-{ time: 120.23, column: 1 },
-{ time: 120.71, column: 2 },
-{ time: 121.25, column: 3 },
-{ time: 123.12, column: 0 },
-{ time: 123.99, column: 1 },
-{ time: 124.18, column: 2 },
-{ time: 124.51, column: 3 },
-{ time: 125.26, column: 0 },
-{ time: 125.58, column: 1 },
-{ time: 126.08, column: 2 },
-{ time: 127.19, column: 3 },
-{ time: 127.71, column: 0 },
-{ time: 128.23, column: 1 },
-{ time: 128.55, column: 2 },
-{ time: 129.11, column: 3 },
-{ time: 131.16, column: 0 },
-{ time: 131.64, column: 1 },
-{ time: 132.22, column: 2 },
-{ time: 132.73, column: 3 },
-{ time: 133.01, column: 0 },
-{ time: 133.52, column: 1 },
-{ time: 133.66, column: 2 },
-{ time: 134.19, column: 3 },
-{ time: 134.64, column: 0 },
-{ time: 134.76, column: 1 },
-{ time: 135.09, column: 2 },
-{ time: 135.30, column: 3 },
-{ time: 135.45, column: 0 },
-{ time: 135.65, column: 1 },
-{ time: 135.89, column: 2 },
-{ time: 136.20, column: 3 },
-{ time: 136.74, column: 0 },
-{ time: 137.28, column: 1 },
-{ time: 137.77, column: 2 },
-{ time: 138.25, column: 3 },
-{ time: 138.79, column: 0 },
-{ time: 139.30, column: 1 },
-{ time: 139.48, column: 2 },
-{ time: 139.66, column: 3 },
-{ time: 139.84, column: 0 },
-{ time: 140.00, column: 1 },
-{ time: 140.19, column: 2 },
-{ time: 140.59, column: 3 },
-{ time: 140.73, column: 0 },
-{ time: 141.03, column: 1 },
-{ time: 141.64, column: 2 },
-{ time: 141.79, column: 3 },
-{ time: 142.11, column: 0 },
-{ time: 142.27, column: 1 },
-{ time: 142.62, column: 2 },
-{ time: 142.76, column: 3 },
-{ time: 143.09, column: 0 },
-{ time: 143.26, column: 1 },
-{ time: 143.45, column: 2 },
-{ time: 143.62, column: 3 },
-{ time: 143.79, column: 0 },
-{ time: 144.06, column: 1 },
-{ time: 144.25, column: 2 },
-{ time: 144.57, column: 3 },
-{ time: 144.72, column: 0 },
-{ time: 145.06, column: 1 },
-{ time: 145.57, column: 2 },
-{ time: 145.69, column: 3 },
-{ time: 146.05, column: 0 },
-{ time: 146.22, column: 1 },
-{ time: 146.60, column: 2 },
-{ time: 146.76, column: 3 },
-{ time: 147.10, column: 0 },
-{ time: 147.28, column: 1 },
-{ time: 147.77, column: 2 },
-{ time: 148.02, column: 3 },
-{ time: 149.23, column: 0 },
-{ time: 149.77, column: 1 },
-{ time: 150.36, column: 2 },
-{ time: 150.83, column: 3 },
-{ time: 151.26, column: 0 },
-{ time: 151.77, column: 1 },
-{ time: 152.28, column: 2 },
-{ time: 152.80, column: 3 },
-{ time: 153.54, column: 0 },
-{ time: 155.23, column: 1 },
-{ time: 155.65, column: 2 },
-{ time: 155.77, column: 3 },
-{ time: 156.08, column: 0 },
-{ time: 157.20, column: 1 },
-{ time: 157.56, column: 2 },
-{ time: 158.06, column: 3 },
-{ time: 158.25, column: 0 },
-{ time: 159.24, column: 1 },
-{ time: 159.43, column: 2 },
-{ time: 160.27, column: 3 },
-{ time: 160.76, column: 0 },
-{ time: 161.28, column: 1 },
-{ time: 163.21, column: 2 },
-{ time: 164.03, column: 3 },
-{ time: 164.19, column: 0 },
-{ time: 164.57, column: 1 },
-{ time: 165.23, column: 2 },
-{ time: 165.56, column: 3 },
-{ time: 166.05, column: 0 },
-{ time: 167.19, column: 1 },
-{ time: 167.75, column: 2 },
-{ time: 168.24, column: 3 },
-{ time: 168.57, column: 0 },
-{ time: 169.10, column: 1 },
-{ time: 171.23, column: 2 },
-{ time: 171.74, column: 3 },
-{ time: 172.10, column: 0 },
-{ time: 172.25, column: 1 },
-{ time: 172.60, column: 2 },
-{ time: 172.76, column: 3 },
-{ time: 173.08, column: 0 },
-{ time: 173.24, column: 1 },
-{ time: 173.57, column: 2 },
-{ time: 174.03, column: 3 },
-{ time: 175.06, column: 0 },
-{ time: 175.19, column: 1 },
-{ time: 175.65, column: 2 },
-{ time: 176.21, column: 3 },
-{ time: 176.57, column: 0 },
-{ time: 176.71, column: 1 },
-{ time: 177.06, column: 2 },
-{ time: 177.21, column: 3 },
-{ time: 177.60, column: 0 },
-{ time: 177.74, column: 1 },
-{ time: 178.04, column: 2 },
-{ time: 179.23, column: 3 },
-{ time: 179.40, column: 0 },
-{ time: 179.60, column: 1 },
-{ time: 179.80, column: 2 },
-{ time: 179.97, column: 3 },
-{ time: 180.16, column: 0 },
-{ time: 180.33, column: 1 },
-{ time: 180.52, column: 2 },
-{ time: 180.71, column: 3 },
-{ time: 180.90, column: 0 },
-{ time: 181.08, column: 1 },
-{ time: 181.26, column: 2 },
-{ time: 181.50, column: 3 },
-{ time: 183.20, column: 0 },
-{ time: 183.60, column: 1 },
-{ time: 183.75, column: 2 },
-{ time: 184.11, column: 3 },
-{ time: 184.25, column: 0 },
-{ time: 184.61, column: 1 },
-{ time: 184.74, column: 2 },
-{ time: 185.07, column: 3 },
-{ time: 185.23, column: 0 },
-{ time: 185.58, column: 1 },
-{ time: 186.11, column: 2 },
-{ time: 186.59, column: 3 },
-{ time: 187.16, column: 0 },
-{ time: 187.29, column: 1 },
-{ time: 187.76, column: 2 },
-{ time: 188.25, column: 3 },
-{ time: 188.56, column: 0 },
-{ time: 188.71, column: 1 },
-{ time: 189.05, column: 2 },
-{ time: 189.55, column: 3 },
-{ time: 190.03, column: 0 },
-{ time: 191.18, column: 1 },
-{ time: 191.31, column: 2 },
-{ time: 191.70, column: 3 },
-{ time: 192.23, column: 0 },
-{ time: 192.56, column: 1 },
-{ time: 192.71, column: 2 },
-{ time: 193.04, column: 3 },
-{ time: 195.08, column: 0 },
-{ time: 195.21, column: 1 },
-{ time: 195.70, column: 2 },
-{ time: 196.24, column: 3 },
-{ time: 196.55, column: 0 },
-{ time: 196.70, column: 1 },
-{ time: 197.00, column: 2 },
-{ time: 197.52, column: 3 },
-{ time: 198.04, column: 0 },
-{ time: 199.18, column: 1 },
-{ time: 199.57, column: 2 },
-{ time: 199.71, column: 3 },
-{ time: 200.02, column: 0 },
-{ time: 200.18, column: 1 },
-{ time: 200.70, column: 2 },
-{ time: 201.24, column: 3 },
-{ time: 201.74, column: 0 },
-{ time: 202.19, column: 1 },
-{ time: 202.73, column: 2 },
-
-
+      { time: 5.79, column: 2 },
+      { time: 6.03, column: 0 },
+      { time: 6.35, column: 3 },
+      { time: 7.17, column: 1 },
+      { time: 7.38, column: 2 },
+      { time: 7.58, column: 0 },
+      { time: 8.04, column: 3 },
+      { time: 8.25, column: 1 },
+      { time: 8.47, column: 2 },
+      { time: 8.91, column: 0 },
+      { time: 9.08, column: 1 },
+      { time: 9.32, column: 3 },
+      { time: 9.77, column: 2 },
+      { time: 9.96, column: 0 },
+      { time: 10.20, column: 1 },
+      { time: 10.63, column: 3 },
+      { time: 10.83, column: 2 },
+      { time: 11.09, column: 0 },
+      { time: 11.51, column: 1 },
+      { time: 11.70, column: 3 },
+      { time: 11.91, column: 2 },
+      { time: 12.35, column: 0 },
+      { time: 12.54, column: 1 },
+      { time: 12.80, column: 3 },
+      { time: 13.21, column: 2 },
+      { time: 13.44, column: 0 },
+      { time: 13.65, column: 1 },
+      { time: 14.07, column: 3 },
+      { time: 14.30, column: 2 },
+      { time: 14.51, column: 0 },
+      { time: 14.95, column: 1 },
+      { time: 15.17, column: 3 },
+      { time: 15.37, column: 2 },
+      { time: 15.80, column: 0 },
+      { time: 16.01, column: 1 },
+      { time: 16.26, column: 3 },
+      { time: 16.65, column: 2 },
+      { time: 16.86, column: 0 },
+      { time: 17.07, column: 1 },
+      { time: 17.55, column: 3 },
+      { time: 17.77, column: 2 },
+      { time: 17.97, column: 0 },
+      { time: 18.43, column: 1 },
+      { time: 18.63, column: 3 },
+      { time: 18.84, column: 2 },
+      { time: 19.26, column: 0 },
+      { time: 19.47, column: 1 },
+      { time: 19.68, column: 3 },
+      { time: 20.32, column: 2 },
+      { time: 21.02, column: 0 },
+      { time: 21.24, column: 1 },
+      { time: 21.42, column: 3 },
+      { time: 21.67, column: 2 },
+      { time: 21.86, column: 0 },
+      { time: 22.09, column: 1 },
+      { time: 22.28, column: 3 },
+      { time: 22.54, column: 2 },
+      { time: 23.84, column: 0 },
+      { time: 24.50, column: 1 },
+      { time: 24.70, column: 3 },
+      { time: 24.91, column: 2 },
+      { time: 25.12, column: 0 },
+      { time: 25.35, column: 1 },
+      { time: 25.57, column: 3 },
+      { time: 25.76, column: 2 },
+      { time: 25.98, column: 0 },
+      { time: 26.17, column: 1 },
+      { time: 26.30, column: 3 },
+      { time: 26.49, column: 2 },
+      { time: 26.72, column: 0 },
+      { time: 26.83, column: 1 },
+      { time: 27.28, column: 3 },
+      { time: 27.55, column: 1 },
+      { time: 27.74, column: 3 },
+      { time: 27.94, column: 2 },
+      { time: 28.12, column: 0 },
+      { time: 28.33, column: 1 },
+      { time: 28.76, column: 3 },
+      { time: 28.95, column: 2 },
+      { time: 29.20, column: 0 },
+      { time: 29.44, column: 1 },
+      { time: 29.90, column: 3 },
+      { time: 30.69, column: 2 },
+      { time: 31.37, column: 0 },
+      { time: 31.59, column: 1 },
+      { time: 31.81, column: 2 },
+      { time: 32.03, column: 3 },
+      { time: 32.25, column: 1 },
+      { time: 32.47, column: 0 },
+      { time: 32.69, column: 3 },
+      { time: 32.89, column: 2 },
+      { time: 33.09, column: 1 },
+      { time: 33.32, column: 0 },
+      { time: 33.54, column: 3 },
+      { time: 33.96, column: 2 },
+      { time: 34.15, column: 1 },
+      { time: 34.37, column: 3 },
+      { time: 34.59, column: 0 },
+      { time: 34.86, column: 2 },
+      { time: 35.08, column: 1 },
+      { time: 35.29, column: 3 },
+      { time: 35.52, column: 0 },
+      { time: 35.73, column: 2 },
+      { time: 35.94, column: 1 },
+      { time: 36.14, column: 3 },
+      { time: 36.35, column: 0 },
+      { time: 36.57, column: 2 },
+      { time: 37.01, column: 1 },
+      { time: 37.44, column: 3 },
+      { time: 37.84, column: 0 },
+      { time: 38.05, column: 2 },
+      { time: 38.26, column: 1 },
+      { time: 38.50, column: 3 },
+      { time: 38.70, column: 0 },
+      { time: 38.92, column: 1 },
+      { time: 39.13, column: 3 },
+      { time: 39.35, column: 2 },
+      { time: 39.55, column: 0 },
+      { time: 39.96, column: 1 },
+      { time: 40.85, column: 3 },
+      { time: 41.29, column: 2 },
+      { time: 41.74, column: 0 },
+      { time: 42.18, column: 1 },
+      { time: 42.58, column: 3 },
+      { time: 42.77, column: 2 },
+      { time: 42.99, column: 0 },
+      { time: 43.17, column: 1 },
+      { time: 43.43, column: 3 },
+      { time: 43.85, column: 2 },
+      { time: 44.48, column: 0 },
+      { time: 45.17, column: 1 },
+      { time: 45.39, column: 3 },
+      { time: 45.60, column: 2 },
+      { time: 45.80, column: 0 },
+      { time: 46.03, column: 1 },
+      { time: 46.24, column: 3 },
+      { time: 46.46, column: 2 },
+      { time: 46.68, column: 0 },
+      { time: 46.90, column: 1 },
+      { time: 47.11, column: 3 },
+      { time: 47.33, column: 2 },
+      { time: 47.74, column: 0 },
+      { time: 47.95, column: 1 },
+      { time: 48.20, column: 3 },
+      { time: 48.62, column: 2 },
+      { time: 48.81, column: 0 },
+      { time: 49.06, column: 1 },
+      { time: 49.49, column: 3 },
+      { time: 49.69, column: 2 },
+      { time: 49.91, column: 0 },
+      { time: 50.34, column: 1 },
+      { time: 50.78, column: 3 },
+      { time: 51.23, column: 2 },
+      { time: 51.43, column: 0 },
+      { time: 51.64, column: 1 },
+      { time: 52.10, column: 3 },
+      { time: 52.30, column: 2 },
+      { time: 52.51, column: 0 },
+      { time: 52.98, column: 1 },
+      { time: 53.19, column: 3 },
+      { time: 53.38, column: 2 },
+      { time: 53.80, column: 0 },
+      { time: 54.00, column: 1 },
+      { time: 54.23, column: 3 },
+      { time: 54.90, column: 2 },
+      { time: 55.45, column: 0 },
+      { time: 55.61, column: 1 },
+      { time: 55.80, column: 3 },
+      { time: 56.01, column: 2 },
+      { time: 56.19, column: 0 },
+      { time: 56.41, column: 1 },
+      { time: 56.61, column: 3 },
+      { time: 56.83, column: 2 },
+      { time: 57.05, column: 0 },
+      { time: 57.26, column: 1 },
+      { time: 57.46, column: 3 },
+      { time: 57.69, column: 2 },
+      { time: 58.17, column: 2 },
+      { time: 58.57, column: 1 },
+      { time: 59.03, column: 3 },
+      { time: 59.43, column: 0 },
+      { time: 59.87, column: 2 },
+      { time: 60.08, column: 1 },
+      { time: 60.29, column: 3 },
+      { time: 60.49, column: 0 },
+      { time: 60.74, column: 2 },
+      { time: 61.16, column: 1 },
+      { time: 61.60, column: 3 },
+      { time: 62.06, column: 0 },
+      { time: 62.49, column: 2 },
+      { time: 62.93, column: 1 },
+      { time: 63.37, column: 3 },
+      { time: 63.77, column: 0 },
+      { time: 64.20, column: 2 },
+      { time: 64.65, column: 1 },
+      { time: 65.13, column: 3 },
+      { time: 65.90, column: 0 },
+      { time: 66.11, column: 2 },
+      { time: 66.33, column: 1 },
+      { time: 66.55, column: 3 },
+      { time: 66.76, column: 0 },
+      { time: 66.97, column: 2 },
+      { time: 67.19, column: 1 },
+      { time: 67.38, column: 3 },
+      { time: 67.59, column: 0 },
+      { time: 67.81, column: 2 },
+      { time: 68.04, column: 1 },
+      { time: 68.48, column: 3 },
+      { time: 68.72, column: 0 },
+      { time: 68.91, column: 2 },
+      { time: 69.10, column: 1 },
+      { time: 69.31, column: 3 },
+      { time: 69.74, column: 0 },
+      { time: 70.18, column: 2 },
+      { time: 70.43, column: 1 },
+      { time: 70.54, column: 3 },
+      { time: 70.68, column: 0 },
+      { time: 70.92, column: 2 },
+      { time: 71.12, column: 1 },
+      { time: 71.53, column: 3 },
+      { time: 72.17, column: 0 },
+      { time: 73.32, column: 2 },
+      { time: 73.67, column: 1 },
+      { time: 73.87, column: 3 },
+      { time: 74.10, column: 0 },
+      { time: 74.32, column: 2 },
+      { time: 74.53, column: 1 },
+      { time: 74.94, column: 3 },
+      { time: 75.42, column: 0 },
+      { time: 75.83, column: 2 },
+      { time: 76.28, column: 1 },
+      { time: 76.71, column: 3 },
+      { time: 77.14, column: 0 },
+      { time: 77.58, column: 2 },
+      { time: 78.00, column: 1 },
+      { time: 78.43, column: 3 },
+      { time: 78.86, column: 0 },
+      { time: 79.32, column: 2 },
+      { time: 79.76, column: 1 },
+      { time: 79.93, column: 3 },
+      { time: 80.14, column: 0 },
+      { time: 80.34, column: 2 },
+      { time: 80.57, column: 1 },
+      { time: 80.86, column: 3 },
+      { time: 81.22, column: 0 },
+      { time: 82.28, column: 2 },
+      { time: 82.57, column: 1 },
+      { time: 82.76, column: 3 },
+      { time: 82.96, column: 0 },
+      { time: 83.17, column: 2 },
+      { time: 83.35, column: 1 },
+      { time: 83.60, column: 3 },
+      { time: 83.79, column: 0 },
+      { time: 84.03, column: 2 },
+      { time: 84.25, column: 1 },
+      { time: 84.48, column: 3 },
+      { time: 84.66, column: 0 },
+      { time: 84.87, column: 2 },
+      { time: 85.05, column: 1 },
+      { time: 85.27, column: 3 },
+      { time: 85.44, column: 0 },
+      { time: 85.64, column: 2 },
+      { time: 85.80, column: 1 },
+      { time: 85.97, column: 3 },
+      { time: 86.18, column: 0 },
+      { time: 86.61, column: 2 },
+      { time: 86.83, column: 1 },
+      { time: 87.06, column: 3 },
+      { time: 87.49, column: 0 },
+      { time: 87.70, column: 2 },
+      { time: 87.93, column: 1 },
+      { time: 88.31, column: 3 },
+      { time: 88.51, column: 0 },
+      { time: 88.76, column: 2 },
+      { time: 89.19, column: 1 },
+      { time: 89.39, column: 3 },
+      { time: 89.64, column: 0 },
+      { time: 90.05, column: 2 },
+      { time: 90.25, column: 1 },
+      { time: 90.46, column: 3 },
+      { time: 90.93, column: 0 },
+      { time: 91.14, column: 2 },
+      { time: 91.37, column: 1 },
+      { time: 91.81, column: 3 },
+      { time: 92.01, column: 0 },
+      { time: 92.24, column: 2 },
+      { time: 92.87, column: 1 },
+      { time: 93.08, column: 3 },
+      { time: 93.23, column: 0 },
+      { time: 93.34, column: 2 },
+      { time: 93.46, column: 1 },
+      { time: 93.59, column: 3 },
+      { time: 93.70, column: 0 },
+      { time: 93.81, column: 2 },
+      { time: 93.92, column: 1 },
+      { time: 94.02, column: 3 },
+      { time: 94.20, column: 0 },
+      { time: 94.46, column: 2 },
+      { time: 94.58, column: 1 },
+      { time: 94.70, column: 3 },
+      { time: 94.82, column: 0 },
+      { time: 94.91, column: 2 },
+      { time: 95.03, column: 1 },
+      { time: 95.15, column: 3 },
+      { time: 95.27, column: 0 },
+      { time: 95.39, column: 2 },
+      { time: 95.50, column: 1 },
+      { time: 95.63, column: 3 },
+      { time: 96.12, column: 0 },
+      { time: 96.25, column: 2 },
+      { time: 96.39, column: 1 },
+      { time: 96.55, column: 3 },
+      { time: 96.78, column: 0 },
+      { time: 96.96, column: 2 },
+      { time: 97.19, column: 1 },
+      { time: 97.29, column: 3 },
+      { time: 97.45, column: 0 },
+      { time: 97.68, column: 2 },
+      { time: 97.85, column: 1 },
+      { time: 98.09, column: 3 },
+      { time: 98.26, column: 0 },
+      { time: 98.48, column: 2 },
+      { time: 98.74, column: 1 },
+      { time: 98.92, column: 3 },
+      { time: 99.14, column: 0 },
+      { time: 99.60, column: 2 },
+      { time: 99.82, column: 1 },
+      { time: 100.00, column: 3 },
+      { time: 100.15, column: 0 },
+      { time: 100.29, column: 2 },
+      { time: 100.52, column: 1 },
+      { time: 100.67, column: 3 },
+      { time: 100.80, column: 0 },
+      { time: 100.93, column: 2 },
+      { time: 101.05, column: 0 },
+      { time: 101.33, column: 0 },
+      { time: 101.47, column: 2 },
+      { time: 101.61, column: 1 },
+      { time: 101.73, column: 1 },
+      { time: 101.88, column: 0 },
+      { time: 102.12, column: 0 },
+      { time: 102.30, column: 0 },
+      { time: 102.57, column: 2 },
+      { time: 103.03, column: 1 },
+      { time: 103.24, column: 1 },
+      { time: 103.46, column: 0 },
+      { time: 103.69, column: 0 },
+      { time: 103.93, column: 2 },
+      { time: 104.15, column: 1 },
+      { time: 104.37, column: 1 },
+      { time: 104.58, column: 3 },
+      { time: 104.79, column: 1 },
+      { time: 104.98, column: 1 },
+      { time: 105.20, column: 0 },
+      { time: 105.43, column: 0 },
+      { time: 105.65, column: 0 },
+      { time: 105.83, column: 0 },
+      { time: 106.04, column: 2 },
+      { time: 106.48, column: 1 },
+      { time: 106.71, column: 1 },
+      { time: 106.93, column: 1 },
+      { time: 107.16, column: 0 },
+      { time: 107.37, column: 0 },
+      { time: 107.59, column: 1 },
+      { time: 107.79, column: 3 },
+      { time: 108.00, column: 2 },
+      { time: 108.21, column: 0 },
+      { time: 108.41, column: 2 },
+      { time: 108.64, column: 2 },
+      { time: 108.83, column: 2 },
+      { time: 109.06, column: 2 },
+      { time: 109.23, column: 2 },
+      { time: 109.54, column: 2 },
+      { time: 109.94, column: 2 },
+      { time: 110.13, column: 0 },
+      { time: 110.36, column: 1 },
+      { time: 110.80, column: 0 },
+      { time: 111.01, column: 3 },
+      { time: 111.22, column: 1 },
+      { time: 111.65, column: 1 },
+      { time: 111.85, column: 0 },
+      { time: 112.06, column: 3 },
+      { time: 112.50, column: 0 },
+      { time: 112.71, column: 3 },
+      { time: 112.97, column: 1 },
+      { time: 113.40, column: 3 },
+      { time: 113.63, column: 2 },
+      { time: 113.85, column: 1 },
+      { time: 114.07, column: 1 },
+      { time: 114.29, column: 1 },
+      { time: 114.49, column: 3 },
+      { time: 114.70, column: 1 },
+      { time: 114.91, column: 2 },
+      { time: 115.12, column: 0 },
+      { time: 115.33, column: 0 },
+      { time: 115.54, column: 1 },
+      { time: 115.75, column: 3 },
+      { time: 115.97, column: 3 },
+      { time: 116.19, column: 2 },
+      { time: 116.43, column: 0 },
+      { time: 116.64, column: 2 },
+      { time: 116.85, column: 1 },
+      { time: 117.07, column: 3 },
+      { time: 117.33, column: 1 },
+      { time: 117.52, column: 1 },
+      { time: 117.75, column: 3 },
+      { time: 117.96, column: 0 },
+      { time: 118.17, column: 3 },
+      { time: 118.40, column: 1 },
+      { time: 118.61, column: 0 },
+      { time: 118.89, column: 0 },
+      { time: 119.18, column: 1 },
+      { time: 119.39, column: 2 },
+      { time: 119.63, column: 2 },
+      { time: 119.87, column: 2 },
+      { time: 120.08, column: 0 },
+      { time: 120.27, column: 3 },
+      { time: 120.49, column: 3 },
+      { time: 120.69, column: 2 },
+      { time: 120.92, column: 1 },
+      { time: 121.15, column: 1 },
+      { time: 121.39, column: 2 },
+      { time: 121.62, column: 1 },
+      { time: 121.83, column: 1 },
+      { time: 122.05, column: 3 },
+      { time: 122.25, column: 1 },
+      { time: 122.49, column: 2 },
+      { time: 122.72, column: 0 },
+      { time: 122.92, column: 2 },
+      { time: 123.12, column: 1 },
+      { time: 123.35, column: 0 },
+      { time: 123.57, column: 3 },
+      { time: 124.59, column: 3 },
+      { time: 124.82, column: 1 },
+      { time: 125.05, column: 1 },
+      { time: 125.27, column: 2 },
+      { time: 125.48, column: 1 },
+      { time: 125.80, column: 1 },
+      { time: 126.14, column: 1 },
+      { time: 126.31, column: 1 },
+      { time: 126.53, column: 1 },
+      { time: 126.76, column: 3 },
+      { time: 127.18, column: 1 },
+      { time: 127.64, column: 3 },
+      { time: 128.10, column: 3 },
+      { time: 128.53, column: 0 },
+      { time: 128.95, column: 0 },
+      { time: 129.42, column: 2 },
+      { time: 129.84, column: 1 },
+      { time: 130.28, column: 2 },
+      { time: 130.68, column: 3 },
+      { time: 130.95, column: 2 },
+      { time: 131.13, column: 2 },
+      { time: 131.32, column: 3 },
+      { time: 131.52, column: 0 },
+      { time: 131.73, column: 1 },
+      { time: 131.95, column: 3 },
+      { time: 132.17, column: 3 },
+      { time: 132.39, column: 2 },
+      { time: 132.67, column: 3 },
+      { time: 132.87, column: 3 },
+      { time: 133.07, column: 1 },
+      { time: 133.26, column: 2 },
+      { time: 133.47, column: 3 },
+      { time: 133.66, column: 1 },
+      { time: 133.91, column: 3 },
+      { time: 134.30, column: 2 },
+      { time: 134.62, column: 0 },
+      { time: 134.98, column: 2 },
+      { time: 135.18, column: 2 },
+      { time: 135.44, column: 0 },
+      { time: 135.68, column: 0 },
+      { time: 135.88, column: 0 },
+      { time: 136.08, column: 0 },
+      { time: 136.29, column: 2 },
+      { time: 136.50, column: 2 },
+      { time: 136.70, column: 3 },
+      { time: 137.09, column: 0 },
+      { time: 137.67, column: 2 },
+      { time: 137.81, column: 2 },
+      { time: 138.40, column: 3 },
+      { time: 138.62, column: 3 },
+      { time: 138.85, column: 2 },
+      { time: 139.06, column: 3 },
+      { time: 139.30, column: 3 },
+      { time: 139.72, column: 2 },
+      { time: 140.18, column: 1 },
+      { time: 140.65, column: 3 },
+      { time: 141.03, column: 2 },
+      { time: 141.45, column: 1 },
+      { time: 141.66, column: 0 },
+      { time: 141.88, column: 2 },
+      { time: 142.31, column: 1 },
+      { time: 142.74, column: 3 },
+      { time: 143.01, column: 2 },
+      { time: 143.10, column: 1 },
+      { time: 143.34, column: 1 },
+      { time: 143.62, column: 2 },
+      { time: 144.02, column: 1 },
+      { time: 144.46, column: 2 },
+      { time: 144.90, column: 2 },
+      { time: 145.32, column: 2 },
+      { time: 145.55, column: 3 },
+      { time: 145.77, column: 0 },
+      { time: 145.98, column: 2 },
+      { time: 146.20, column: 3 },
+      { time: 146.50, column: 1 },
+      { time: 146.64, column: 0 },
+      { time: 146.86, column: 1 },
+      { time: 147.06, column: 0 },
+      { time: 147.48, column: 0 },
+      { time: 147.92, column: 0 },
+      { time: 148.19, column: 0 },
+      { time: 148.35, column: 1 },
+      { time: 148.59, column: 3 },
+      { time: 148.78, column: 2 },
+      { time: 148.98, column: 0 },
+      { time: 149.24, column: 0 },
+      { time: 149.67, column: 3 },
+      { time: 149.91, column: 0 },
+      { time: 150.01, column: 1 },
+      { time: 150.15, column: 2 },
+      { time: 150.38, column: 3 },
+      { time: 150.55, column: 2 },
+      { time: 150.76, column: 0 },
+      { time: 150.96, column: 2 },
+      { time: 151.38, column: 0 },
+      { time: 151.59, column: 0 },
+      { time: 151.82, column: 1 },
+      { time: 152.06, column: 3 },
+      { time: 152.27, column: 1 },
+      { time: 152.47, column: 1 },
+      { time: 152.69, column: 3 },
+      { time: 152.94, column: 0 },
+      { time: 153.14, column: 1 },
+      { time: 153.39, column: 0 },
+      { time: 153.74, column: 3 },
+      { time: 154.13, column: 2 },
+      { time: 154.37, column: 3 },
+      { time: 154.83, column: 1 },
+      { time: 155.09, column: 0 },
+      { time: 155.28, column: 0 },
+      { time: 155.47, column: 0 },
+      { time: 155.69, column: 0 },
+      { time: 155.93, column: 2 },
+      { time: 156.13, column: 1 },
+      { time: 156.35, column: 3 },
+      { time: 156.58, column: 2 },
+      { time: 156.77, column: 2 },
+      { time: 156.99, column: 3 },
+      { time: 157.21, column: 1 },
+      { time: 157.40, column: 0 },
+      { time: 157.54, column: 3 },
+      { time: 157.75, column: 1 },
+      { time: 157.83, column: 3 },
+      { time: 157.94, column: 2 },
+      { time: 158.08, column: 3 },
+      { time: 158.26, column: 1 },
+      { time: 158.44, column: 1 },
+      { time: 158.67, column: 1 },
+      { time: 159.10, column: 1 },
+      { time: 159.35, column: 2 },
+      { time: 159.54, column: 1 },
+      { time: 159.98, column: 0 },
+      { time: 160.20, column: 1 },
+      { time: 160.40, column: 3 },
+      { time: 160.85, column: 3 },
+      { time: 161.06, column: 0 },
+      { time: 161.25, column: 3 },
+      { time: 161.72, column: 2 },
+      { time: 161.94, column: 1 },
+      { time: 162.12, column: 3 },
+      { time: 162.60, column: 3 },
+      { time: 162.80, column: 2 },
+      { time: 163.01, column: 1 },
+      { time: 163.49, column: 1 },
+      { time: 163.68, column: 2 },
+      { time: 163.92, column: 1 },
+      { time: 164.32, column: 1 },
+      { time: 164.53, column: 1 },
+      { time: 164.73, column: 1 },
+      { time: 165.17, column: 0 },
+      { time: 165.41, column: 1 },
+      { time: 165.64, column: 2 },
+      { time: 165.86, column: 1 },
+      { time: 166.07, column: 0 },
+      { time: 166.27, column: 1 },
+      { time: 166.47, column: 3 },
+      { time: 166.72, column: 2 },
+      { time: 166.93, column: 1 },
+      { time: 167.13, column: 3 },
+      { time: 167.35, column: 1 },
+      { time: 167.61, column: 2 },
+      { time: 167.79, column: 2 },
+      { time: 168.19, column: 3 },
+      { time: 168.70, column: 0 },
+      { time: 168.92, column: 1 },
+      { time: 169.49, column: 0 },
+      { time: 169.71, column: 3 },
+      { time: 169.94, column: 2 },
+      { time: 170.13, column: 1 },
+      { time: 170.37, column: 2 },
+      { time: 170.59, column: 2 },
+      { time: 170.81, column: 2 },
+      { time: 171.02, column: 0 },
+      { time: 171.22, column: 0 },
+      { time: 171.43, column: 1 },
+      { time: 171.65, column: 3 },
+      { time: 172.08, column: 1 },
+      { time: 172.29, column: 1 },
+      { time: 172.50, column: 2 },
+      { time: 172.94, column: 3 },
+      { time: 173.13, column: 0 },
+      { time: 173.35, column: 2 },
+      { time: 173.79, column: 1 },
+      { time: 174.01, column: 0 },
+      { time: 174.22, column: 1 },
+      { time: 174.64, column: 3 },
+      { time: 174.84, column: 2 },
+      { time: 175.10, column: 1 },
+      { time: 175.52, column: 0 },
+      { time: 175.73, column: 1 },
+      { time: 175.94, column: 3 },
+      { time: 176.37, column: 1 },
+      { time: 176.57, column: 1 },
+      { time: 176.81, column: 3 },
+      { time: 177.28, column: 2 },
+      { time: 177.47, column: 0 },
+      { time: 177.67, column: 2 },
+      { time: 178.14, column: 1 },
+      { time: 178.35, column: 3 },
+      { time: 178.57, column: 2 },
     ];
 
     let tapMode = false;
@@ -519,22 +838,18 @@
       }
       handleHit(e.key.toLowerCase());
     });
-// 📱 캔버스 터치 입력 (폰/태블릿용)
-canvas.addEventListener("touchstart", (e) => {
-  e.preventDefault(); // 화면 스크롤 방지
 
-  const touch = e.touches[0];
-  const rect = canvas.getBoundingClientRect();
-  const x = touch.clientX - rect.left;
-
-  // 터치된 위치가 몇 번째 칼럼인지 계산 (0~3)
-  const idx = Math.floor(x / colW);
-
-  if (idx >= 0 && idx < columns) {
-    // keyMap[0] = 'd', [1] = 'f', [2] = 'j', [3] = 'k'
-    handleHit(keyMap[idx]);
-  }
-});
+    // 📱 캔버스 터치 입력 (폰/태블릿용)
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const idx = Math.floor(x / colW);
+      if (idx >= 0 && idx < columns) {
+        handleHit(keyMap[idx]);
+      }
+    });
 
     // 노래 시작 / 일시정지
     startBtn.addEventListener("click", () => {
@@ -549,7 +864,7 @@ canvas.addEventListener("touchstart", (e) => {
       }
     });
 
-    // 노트 생성 (time = 판정선 도착 시점, travelTime만큼 일찍 생성)
+    // 노트 생성
     function spawnNotes() {
       if (!started) return;
       const now = (performance.now() - startPerfTime) / 1000;
@@ -563,7 +878,7 @@ canvas.addEventListener("touchstart", (e) => {
       }
     }
 
-    // 🎨 라인/판정선/키 표시 + 배경 사진 살려서 그리기
+    // 판정선 + 키
     function drawLane() {
       ctx.clearRect(0, 0, W, H);
 
@@ -611,54 +926,71 @@ canvas.addEventListener("touchstart", (e) => {
         ctx.fillRect(x, n.y, w, 20);
       }
 
+      // 자동 Miss 처리
       for (let n of notes) {
         if (n.active && n.y > judgeLineY + 60) {
           n.active = false;
           combo = 0;
+          results.Miss++;
           showJudge("Miss");
         }
       }
     }
 
-    // 키 판정
-    function handleHit(key) {
-      const idx = keyMap.indexOf(key);
-      if (idx === -1) return;
+   function handleHit(key) {
+  const idx = keyMap.indexOf(key);
+  if (idx === -1) return;
 
-      let best = null;
-      let distMin = Infinity;
+  let best = null;
+  let distMin = Infinity;
 
-      for (let n of notes) {
-        if (!n.active || n.column !== idx) continue;
-        const d = Math.abs(n.y - judgeLineY);
-        if (d < distMin) {
-          distMin = d;
-          best = n;
-        }
-      }
-
-      if (!best) {
-        combo = 0;
-        showJudge("Miss");
-        return;
-      }
-
-      if (distMin <= 25) {
-        best.active = false;
-        score += 1000;
-        combo++;
-        showJudge("Perfect");
-      } else if (distMin <= 55) {
-        best.active = false;
-        score += 500;
-        combo++;
-        showJudge("Good");
-      } else {
-        best.active = false;
-        combo = 0;
-        showJudge("Miss");
-      }
+  for (let n of notes) {
+    if (!n.active || n.column !== idx) continue;
+    const d = Math.abs(n.y - judgeLineY);
+    if (d < distMin) {
+      distMin = d;
+      best = n;
     }
+  }
+
+  if (!best) {
+    combo = 0;
+    showJudge("Miss");
+    playHitSound();   // 👈 판정 실패도 ‘쿡’ 소리 나게
+    return;
+  }
+
+  if (distMin <= 25) {
+    best.active = false;
+    score += 1000;
+    combo++;
+    showJudge("Perfect");
+    playHitSound();   // 👈 Perfect일 때 효과음
+  } else if (distMin <= 55) {
+    best.active = false;
+    score += 500;
+    combo++;
+    showJudge("Good");
+    playHitSound();   // 👈 Good일 때 효과음
+  } else {
+    best.active = false;
+    combo = 0;
+    showJudge("Miss");
+    playHitSound();   // 👈 타이밍 많이 벗어나도 누른 건 소리
+  }
+}
+
+
+    function playHitSound() {
+  if (!hitSound) return;
+  try {
+    hitSound.currentTime = 0;
+    hitSound.play();
+  } catch (e) {
+    // 모바일 브라우저에서 가끔 에러 나도 게임 멈추지 않게 무시
+  }
+}
+
 
     function showJudge(t) {
       lastJudge = t;
@@ -666,6 +998,33 @@ canvas.addEventListener("touchstart", (e) => {
       scoreEl.textContent = score;
       comboEl.textContent = combo;
       judgeEl.textContent = lastJudge;
+    }
+
+    // 🔚 게임 끝났는지 체크
+    function checkGameEnd() {
+      if (!started || resultShown) return;
+
+      const allSpawned = chart.every(n => n.spawned);
+      const anyActive = notes.some(n => n.active);
+
+      if (allSpawned && !anyActive) {
+        showResult();
+      }
+    }
+
+    function showResult() {
+      resultShown = true;
+
+      rPerfectEl.textContent = results.Perfect;
+      rGreatEl.textContent   = results.Great;
+      rGoodEl.textContent    = results.Good;
+      rMissEl.textContent    = results.Miss;
+      rComboEl.textContent   = maxCombo;
+      rScoreEl.textContent   = score;
+
+      resultBox.classList.remove("hidden");
+      // 살짝 딜레이 후 페이드인
+      setTimeout(() => resultBox.classList.add("show"), 10);
     }
 
     let last = 0;
@@ -681,11 +1040,38 @@ canvas.addEventListener("touchstart", (e) => {
       drawLane();
       spawnNotes();
       drawNotes(dt);
+      checkGameEnd();
 
       requestAnimationFrame(loop);
     }
 
     requestAnimationFrame(loop);
+
+    // 🌸 처음에 나올 기본 배경 (보선녀 고정 사진)
+    const baseBg = "no1.jpg";
+    canvas.style.backgroundImage = `url("${baseBg}")`;
+
+    // 🎞 20초마다 바뀔 배경 이미지 리스트
+    const bgImages = [
+      "no1.jpg",
+      "no2.jpg",
+      "no3.jpg",
+      "no4.jpg",
+      "no1.jpg",
+      "no5.jpg",
+      "no6.jpg",
+      "no7.jpg"
+    ];
+
+    // 👉 -1에서 시작해서, 첫 번째 교체 때 dodo부터 나오게
+    let currentBg = -1;
+
+    // 20초마다 배경 변경
+    setInterval(() => {
+      currentBg = (currentBg + 1) % bgImages.length;
+      canvas.style.backgroundImage = `url("${bgImages[currentBg]}")`;
+    }, 15000);
   </script>
+
 </body>
 </html>
